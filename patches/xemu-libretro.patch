@@ -1,0 +1,562 @@
+diff --git a/hw/xbox/mcpx/apu/apu.c b/hw/xbox/mcpx/apu/apu.c
+index 1ee6dc4..6bd096d 100644
+--- a/hw/xbox/mcpx/apu/apu.c
++++ b/hw/xbox/mcpx/apu/apu.c
+@@ -20,6 +20,9 @@
+  */
+ 
+ #include "apu_int.h"
++#ifdef XEMU_LIBRETRO
++#include "ui/xemu-libretro.h"
++#endif
+ 
+ MCPXAPUState *g_state; // Used via debug handlers
+ 
+@@ -166,6 +169,15 @@ static void throttle_record_queue(MCPXAPUState *d, int queued_bytes)
+     }
+ }
+ 
++static int monitor_queued_bytes(MCPXAPUState *d)
++{
++#ifdef XEMU_LIBRETRO
++    return xemu_retro_audio_queued() * 4;
++#else
++    return d->monitor.stream ? SDL_GetAudioStreamQueued(d->monitor.stream) : -1;
++#endif
++}
++
+ static void throttle(MCPXAPUState *d)
+ {
+     if (d->ep_frame_div % 8) {
+@@ -174,10 +186,9 @@ static void throttle(MCPXAPUState *d)
+ 
+     int64_t start_us = qemu_clock_get_us(QEMU_CLOCK_REALTIME);
+     throttle_update_debug(d, start_us);
+-    int queued_bytes = -1;
++    int queued_bytes = monitor_queued_bytes(d);
+ 
+-    if (d->monitor.stream) {
+-        queued_bytes = SDL_GetAudioStreamQueued(d->monitor.stream);
++    if (queued_bytes >= 0) {
+         if (queued_bytes >= 0) {
+             throttle_record_queue(d, queued_bytes);
+         }
+@@ -186,7 +197,7 @@ static void throttle(MCPXAPUState *d)
+             if (d->pause_requested) {
+                 break;
+             }
+-            queued_bytes = SDL_GetAudioStreamQueued(d->monitor.stream);
++            queued_bytes = monitor_queued_bytes(d);
+         }
+     }
+ 
+diff --git a/hw/xbox/mcpx/apu/monitor.c b/hw/xbox/mcpx/apu/monitor.c
+index 730fcc9..af67c3a 100644
+--- a/hw/xbox/mcpx/apu/monitor.c
++++ b/hw/xbox/mcpx/apu/monitor.c
+@@ -18,9 +18,18 @@
+  */
+ 
+ #include "apu_int.h"
++#ifdef XEMU_LIBRETRO
++#include "ui/xemu-libretro.h"
++#endif
+ 
+ void mcpx_apu_monitor_init(MCPXAPUState *d, Error **errp)
+ {
++#ifdef XEMU_LIBRETRO
++    d->monitor.stream = NULL;
++    d->monitor.queued_bytes_low = 800 * 4;
++    d->monitor.queued_bytes_high = 2400 * 4;
++    return;
++#endif
+     SDL_AudioSpec spec = {
+         .freq = 48000,
+         .format = SDL_AUDIO_S16LE,
+@@ -80,5 +89,10 @@ void mcpx_apu_monitor_frame(MCPXAPUState *d)
+                             sizeof(d->monitor.frame_buf));
+     }
+ 
++#ifdef XEMU_LIBRETRO
++    xemu_retro_audio_push((const int16_t *)d->monitor.frame_buf,
++                         sizeof(d->monitor.frame_buf) / (2 * sizeof(int16_t)));
++#endif
++
+     memset(d->monitor.frame_buf, 0, sizeof(d->monitor.frame_buf));
+ }
+diff --git a/hw/xbox/nv2a/pgraph/thirdparty/meson.build b/hw/xbox/nv2a/pgraph/thirdparty/meson.build
+index fbc3751..6fca563 100644
+--- a/hw/xbox/nv2a/pgraph/thirdparty/meson.build
++++ b/hw/xbox/nv2a/pgraph/thirdparty/meson.build
+@@ -1,4 +1,7 @@
+ nv2a_vsh_cpu_opts = cmake.subproject_options()
++if get_option('libretro')
++  nv2a_vsh_cpu_opts.add_cmake_defines({'CMAKE_POSITION_INDEPENDENT_CODE': true})
++endif
+ nv2a_vsh_cpu_opts.add_cmake_defines({
+   'CMAKE_OSX_ARCHITECTURES': cmake_macos_arch,
+   'nv2a_vsh_cpu_UNIT_TEST': 'OFF',
+diff --git a/meson.build b/meson.build
+index 82e5f5a..5c07925 100644
+--- a/meson.build
++++ b/meson.build
+@@ -81,6 +81,12 @@ cmake_macos_arch = host_machine.cpu() == 'aarch64' ? 'arm64' : host_machine.cpu(
+ cc = meson.get_compiler('c')
+ cxx = meson.get_compiler('cpp')
+ all_languages = ['c', 'cpp']
++if get_option('libretro')
++  if host_os not in ['linux', 'windows']
++    error('The experimental libretro backend supports Linux and Windows')
++  endif
++  add_project_arguments('-DXEMU_LIBRETRO', language: ['c', 'cpp'])
++endif
+ if host_os == 'darwin' and \
+    add_languages('objc', required: true, native: false)
+   all_languages += ['objc']
+@@ -1673,9 +1679,16 @@ endif
+ 
+ sdl = not_found
+ if not get_option('sdl').auto() or have_system
+-  sdl = dependency('sdl3', required: false, allow_fallback: false)
++  # RetroArch can already have SDL2 loaded. Build a private PIC SDL3 for the
++  # core; system static archives need not support shared-library linking.
++  if not get_option('libretro')
++    sdl = dependency('sdl3', required: false, allow_fallback: false)
++  endif
+   if not sdl.found() and not get_option('sdl').disabled()
+     sdl3_cmake_opts = cmake.subproject_options()
++    if get_option('libretro')
++      sdl3_cmake_opts.add_cmake_defines({'CMAKE_POSITION_INDEPENDENT_CODE': true})
++    endif
+     sdl3_cmake_opts.add_cmake_defines({
+       'SDL_CAMERA': 'OFF',
+       'SDL_DISKAUDIO': 'OFF',
+@@ -2399,6 +2412,9 @@ if vulkan.found()
+     # FIXME: Get spirv-tools to enable opt.
+     glslang_opts = cmake.subproject_options()
+     glslang_opts.add_cmake_defines({'ENABLE_OPT': false, 'ENABLE_HLSL': false})
++    if get_option('libretro')
++      glslang_opts.add_cmake_defines({'CMAKE_POSITION_INDEPENDENT_CODE': true})
++    endif
+     glslang_subpro = cmake.subproject('glslang', options: glslang_opts)
+     libglslang = declare_dependency(link_with: [
+           glslang_subpro.target('glslang'),
+@@ -2411,6 +2427,9 @@ if vulkan.found()
+ 
+   volk_opts = cmake.subproject_options()
+   volk_opts.add_cmake_defines({'VOLK_STATIC_DEFINES': 'VK_NO_PROTOTYPES'})
++  if get_option('libretro')
++    volk_opts.add_cmake_defines({'CMAKE_POSITION_INDEPENDENT_CODE': true})
++  endif
+   if host_os == 'windows'
+     volk_opts.append_compile_args('c', '-DVK_USE_PLATFORM_WIN32_KHR=1')
+   endif
+@@ -2422,6 +2441,9 @@ if vulkan.found()
+ 
+   spirv_reflect_opts = cmake.subproject_options()
+   spirv_reflect_opts.add_cmake_defines({'SPIRV_REFLECT_STATIC_LIB': 'ON'})
++  if get_option('libretro')
++    spirv_reflect_opts.add_cmake_defines({'CMAKE_POSITION_INDEPENDENT_CODE': true})
++  endif
+   spirv_reflect_subproj = cmake.subproject('SPIRV-Reflect', options: spirv_reflect_opts)
+   spirv_reflect = declare_dependency(include_directories: spirv_reflect_subproj.include_directories('spirv-reflect-static'),
+                                      link_with: spirv_reflect_subproj.target('spirv-reflect-static'),
+@@ -4646,6 +4668,26 @@ foreach target : target_dirs
+       'dependencies': []
+     }]
+   endif
++  if get_option('libretro') and target == 'i386-softmmu'
++    retro_link_args = ['-Wl,--wrap=exit']
++    retro_link_depends = []
++    if host_os == 'windows'
++      retro_link_args += ['-Wl,--wrap=__imp_exit', '-Wl,--exclude-all-symbols']
++    else
++      retro_link_depends = files('ui/xemu-libretro.map')
++      retro_link_args += ['-Wl,--version-script=' + meson.current_source_dir() / 'ui/xemu-libretro.map',
++                          '-Wl,-z,nodelete']
++    endif
++    shared_library('xemu_libretro',
++               name_prefix: '',
++               install: false,
++               c_args: c_args,
++               dependencies: arch_deps + [sdl],
++               objects: lib.extract_all_objects(recursive: true),
++               link_depends: retro_link_depends,
++               link_args: retro_link_args)
++    execs = []
++  endif
+   foreach exe: execs
+     exe_name = exe['name']
+     if host_os == 'darwin'
+diff --git a/meson_options.txt b/meson_options.txt
+index b1e7b34..fec6150 100644
+--- a/meson_options.txt
++++ b/meson_options.txt
+@@ -2,6 +2,9 @@
+ # on the configure script command line.  If you add more, list them in
+ # scripts/meson-buildoptions.py's SKIP_OPTIONS constant too.
+ 
++option('libretro', type: 'boolean', value: false,
++       description: 'Build the experimental Linux libretro core')
++
+ option('qemu_suffix', type : 'string', value: 'qemu',
+        description: 'Suffix for QEMU data/modules/config directories (can be empty)')
+ option('docdir', type : 'string', value : 'share/doc',
+diff --git a/system/runstate.c b/system/runstate.c
+index 5340df6..d53212c 100644
+--- a/system/runstate.c
++++ b/system/runstate.c
+@@ -927,7 +927,9 @@ void qemu_init_subsystems(void)
+     Error *err = NULL;
+ #endif
+ 
++#ifndef XEMU_LIBRETRO
+     os_set_line_buffering();
++#endif
+ 
+     module_call_init(MODULE_INIT_TRACE);
+ 
+@@ -941,7 +943,9 @@ void qemu_init_subsystems(void)
+ 
+     bql_lock();
+ 
++#ifndef XEMU_LIBRETRO
+     atexit(qemu_run_exit_notifiers);
++#endif
+ 
+     module_call_init(MODULE_INIT_QOM);
+     module_call_init(MODULE_INIT_MIGRATION);
+@@ -958,7 +962,9 @@ void qemu_init_subsystems(void)
+     }
+ #endif
+ 
++#ifndef XEMU_LIBRETRO
+     os_setup_early_signal_handling();
++#endif
+ 
+     bdrv_init_with_whitelist();
+     socket_init();
+diff --git a/system/vl.c b/system/vl.c
+index f45bdc3..97b5c2d 100644
+--- a/system/vl.c
++++ b/system/vl.c
+@@ -2749,7 +2749,9 @@ static void qemu_init_displays(void)
+     qemu_display_init(ds, &dpy);
+ 
+     /* must be after terminal init, SDL library changes signal handlers */
++#ifndef XEMU_LIBRETRO
+     os_setup_signal_handling();
++#endif
+ 
+     /* init remote displays */
+ #ifdef CONFIG_VNC
+diff --git a/tests/meson.build b/tests/meson.build
+index d389182..80320a1 100644
+--- a/tests/meson.build
++++ b/tests/meson.build
+@@ -85,8 +85,10 @@ endif
+ 
+ subdir('unit')
+ subdir('qapi-schema')
+-subdir('qtest')
++if not get_option('libretro')
++  subdir('qtest')
++  subdir('functional')
++endif
+ subdir('migration-stress')
+-subdir('functional')
+ subdir('tracetool')
+ subdir('xbox')
+diff --git a/ui/meson.build b/ui/meson.build
+index ea46bf0..3dca007 100644
+--- a/ui/meson.build
++++ b/ui/meson.build
+@@ -20,6 +20,9 @@ system_ss.add(files(
+ subdir('thirdparty')
+ 
+ xemu_ss = ss.source_set()
++if get_option('libretro')
++  xemu_ss.add(files('xemu-retro-io.c'))
++endif
+ xemu_ss.add(files(
+   'xemu-input.c',
+   'xemu-monitor.c',
+diff --git a/ui/xemu-input.c b/ui/xemu-input.c
+index 4fbc863..4866e20 100644
+--- a/ui/xemu-input.c
++++ b/ui/xemu-input.c
+@@ -262,6 +262,18 @@ static const int port_map[4] = { 3, 4, 1, 2 };
+ 
+ void xemu_input_init(void)
+ {
++#ifdef XEMU_LIBRETRO
++    for (int port = 0; port < 4; port++) {
++        ControllerState *state = g_new0(ControllerState, 1);
++        state->type = INPUT_DEVICE_LIBRETRO;
++        state->name = "RetroPad";
++        state->bound = -1;
++        bound_drivers[port] = DRIVER_S;
++        QTAILQ_INSERT_TAIL(&available_controllers, state, entry);
++        xemu_input_bind(port, state, 0);
++    }
++    return;
++#endif
+     if (g_config.input.background_input_capture) {
+         SDL_SetHint(SDL_HINT_JOYSTICK_ALLOW_BACKGROUND_EVENTS, "1");
+     }
+diff --git a/ui/xemu-input.h b/ui/xemu-input.h
+index 7023e30..12025ab 100644
+--- a/ui/xemu-input.h
++++ b/ui/xemu-input.h
+@@ -71,6 +71,7 @@ enum controller_state_axis_index {
+ enum controller_input_device_type {
+     INPUT_DEVICE_SDL_KEYBOARD,
+     INPUT_DEVICE_SDL_GAMEPAD,
++    INPUT_DEVICE_LIBRETRO,
+ };
+ 
+ enum peripheral_type { PERIPHERAL_NONE, PERIPHERAL_XMU, PERIPHERAL_TYPE_COUNT };
+diff --git a/ui/xemu-settings.cc b/ui/xemu-settings.cc
+index 5f9148a..c462276 100644
+--- a/ui/xemu-settings.cc
++++ b/ui/xemu-settings.cc
+@@ -77,6 +77,14 @@ const char *xemu_settings_get_base_path(void)
+         return base_path;
+     }
+ 
++#ifdef XEMU_LIBRETRO
++    assert(settings_path != NULL);
++    char *directory = g_path_get_dirname(settings_path);
++    base_path = g_strconcat(directory, G_DIR_SEPARATOR_S, NULL);
++    g_free(directory);
++    return base_path;
++#endif
++
+     if (xemu_settings_detect_portable_mode()) {
+         const char *base = SDL_GetBasePath();
+         assert(base != NULL);
+@@ -206,6 +214,13 @@ bool xemu_settings_load(void)
+     return success;
+ }
+ 
++#ifdef XEMU_LIBRETRO
++void xemu_settings_load_defaults(void)
++{
++    config_tree.store_to_struct(&g_config);
++}
++#endif
++
+ void xemu_settings_save(void)
+ {
+     FILE *fd = qemu_fopen(xemu_settings_get_path(), "wb");
+diff --git a/ui/xemu-settings.h b/ui/xemu-settings.h
+index 880b62f..e883cf9 100644
+--- a/ui/xemu-settings.h
++++ b/ui/xemu-settings.h
+@@ -59,6 +59,9 @@ const char *xemu_settings_get_error_message(void);
+ 
+ // Load config file from disk, or load defaults. Return true on success, false if an error occured.
+ bool xemu_settings_load(void);
++#ifdef XEMU_LIBRETRO
++void xemu_settings_load_defaults(void);
++#endif
+ 
+ // Save config file to disk
+ void xemu_settings_save(void);
+diff --git a/ui/xemu.c b/ui/xemu.c
+index 18dc3b3..84055b4 100644
+--- a/ui/xemu.c
++++ b/ui/xemu.c
+@@ -59,6 +59,9 @@
+ #include <locale.h>
+ #include <math.h>
+ #include <SDL3/SDL.h>
++#ifdef XEMU_LIBRETRO
++#include "xemu-libretro.h"
++#endif
+ 
+ #ifdef _WIN32
+ #include "xui/win32-dxgi-present.h"
+@@ -918,7 +921,7 @@ static void gl_render_frame(struct xemu_console *scon)
+ #endif
+ }
+ 
+-static bool event_watch_callback(void *userdata, SDL_Event *event)
++static bool G_GNUC_UNUSED event_watch_callback(void *userdata, SDL_Event *event)
+ {
+     struct xemu_console *scon = (struct xemu_console *)userdata;
+ 
+@@ -944,7 +947,7 @@ static bool event_watch_callback(void *userdata, SDL_Event *event)
+     return true; // Ignored
+ }
+ 
+-static void poll_events(struct xemu_console *scon)
++static void G_GNUC_UNUSED poll_events(struct xemu_console *scon)
+ {
+     SDL_Event ev1, *ev = &ev1;
+     bool allow_close = true;
+@@ -1008,6 +1011,9 @@ static void poll_events(struct xemu_console *scon)
+ 
+ static void display_very_early_init(DisplayOptions *o)
+ {
++#ifdef XEMU_LIBRETRO
++    SDL_SetHint(SDL_HINT_NO_SIGNAL_HANDLERS, "1");
++#endif
+ #ifdef __linux__
+     /* SDL3 falls back to XWayland on compositors without fifo-v1 [1],
+      * breaking HiDPI. Swap may block when occluded, but the BQL is released
+@@ -1084,6 +1090,11 @@ static void display_very_early_init(DisplayOptions *o)
+     }
+ 
+     SDL_WindowFlags window_flags = (SDL_WindowFlags)(SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY);
++#ifdef XEMU_LIBRETRO
++    window_flags = SDL_WINDOW_OPENGL | SDL_WINDOW_HIDDEN;
++    window_width = 640;
++    window_height = 480;
++#endif
+ 
+     // Create main window
+     m_window = SDL_CreateWindow(
+@@ -1112,6 +1123,7 @@ static void display_very_early_init(DisplayOptions *o)
+     }
+ 
+     if (m_context == NULL) {
++#ifndef XEMU_LIBRETRO
+         SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR,
+             "Unable to create OpenGL context",
+             "Unable to create OpenGL context. This usually means the\r\n"
+@@ -1119,6 +1131,10 @@ static void display_very_early_init(DisplayOptions *o)
+             "\r\n"
+             "xemu cannot continue and will now exit.",
+             m_window);
++#else
++        fprintf(stderr, "Unable to create an OpenGL 4.0 context: %s\n",
++                SDL_GetError());
++#endif
+         SDL_DestroyWindow(m_window);
+         SDL_Quit();
+         exit(1);
+@@ -1155,10 +1171,12 @@ static void display_early_init(DisplayOptions *o)
+ 
+     SDL_GL_MakeCurrent(m_window, m_context);
+     SDL_GL_SetSwapInterval(g_config.display.window.vsync ? 1 : 0);
+-#ifdef _WIN32
++#if defined(_WIN32) && !defined(XEMU_LIBRETRO)
+     win32_dxgi_present_init(m_window);
+ #endif
++#ifndef XEMU_LIBRETRO
+     xemu_hud_init(m_window, m_context);
++#endif
+ }
+ 
+ static const DisplayChangeListenerOps dcl_gl_ops = {
+@@ -1220,7 +1238,9 @@ static void display_init(DisplayState *ds, DisplayOptions *o)
+ 
+     // SDL_PollEvent may block during main window resize or drag operations.
+     // Register event watch to handle rendering during these operations.
++#ifndef XEMU_LIBRETRO
+     SDL_AddEventWatch(event_watch_callback, &scon_list[0]);
++#endif
+ 
+     if (use_vblank_timer_thread) {
+         qemu_thread_create(&vblank_thread, "vblank-timer", vblank_timer_thread,
+@@ -1241,14 +1261,20 @@ static void display_finalize(void)
+         qemu_thread_join(&vblank_thread);
+     }
+ 
++#ifndef XEMU_LIBRETRO
+     SDL_RemoveEventWatch(event_watch_callback, &scon_list[0]);
+-#ifdef _WIN32
++#endif
++#if defined(_WIN32) && !defined(XEMU_LIBRETRO)
+     win32_dxgi_present_cleanup();
+ #endif
+     SDL_GL_MakeCurrent(NULL, NULL);
+     SDL_GL_DestroyContext(m_context);
+     SDL_DestroyWindow(m_window);
++#ifdef XEMU_LIBRETRO
++    SDL_QuitSubSystem(SDL_INIT_VIDEO);
++#else
+     SDL_Quit();
++#endif
+ }
+ 
+ static QemuDisplay qemu_display_xemu = {
+@@ -1309,7 +1335,7 @@ static const wchar_t *get_executable_name(void)
+     return exe_name;
+ }
+ 
+-static void setup_nvidia_profile(void)
++static void G_GNUC_UNUSED setup_nvidia_profile(void)
+ {
+     const wchar_t *exe_name = get_executable_name();
+     if (exe_name == NULL) {
+@@ -1329,7 +1355,7 @@ static void setup_nvidia_profile(void)
+ }
+ #endif
+ 
+-static void init_sdl_app_metadata(void)
++static void G_GNUC_UNUSED init_sdl_app_metadata(void)
+ {
+     SDL_SetAppMetadataProperty(SDL_PROP_APP_METADATA_NAME_STRING, "xemu");
+     SDL_SetAppMetadataProperty(SDL_PROP_APP_METADATA_VERSION_STRING,
+@@ -1340,6 +1366,7 @@ static void init_sdl_app_metadata(void)
+                                "https://xemu.app");
+ }
+ 
++#ifndef XEMU_LIBRETRO
+ int main(int argc, char **argv)
+ {
+     QemuThread thread;
+@@ -1442,6 +1469,7 @@ int main(int argc, char **argv)
+     display_finalize();
+     return exit_status;
+ }
++#endif
+ 
+ void xemu_eject_disc(Error **errp)
+ {
+@@ -1477,3 +1505,7 @@ void xemu_load_disc(const char *path, Error **errp)
+ 
+     xbox_smc_update_tray_state();
+ }
++
++#ifdef XEMU_LIBRETRO
++#include "xemu-libretro.inc.c"
++#endif
+diff --git a/ui/xui/notifications.cc b/ui/xui/notifications.cc
+index f4c5179..5b5e69e 100644
+--- a/ui/xui/notifications.cc
++++ b/ui/xui/notifications.cc
+@@ -155,5 +155,9 @@ void xemu_queue_notification(const char *msg)
+ 
+ void xemu_queue_error_message(const char *msg)
+ {
++#ifdef XEMU_LIBRETRO
++    fprintf(stderr, "xemu-libretro: %s\n", msg);
++#else
+     notification_manager.QueueError(msg);
++#endif
+ }
+diff --git a/ui/xui/win32-dxgi-present.cc b/ui/xui/win32-dxgi-present.cc
+index be5844a..b14a7c9 100644
+--- a/ui/xui/win32-dxgi-present.cc
++++ b/ui/xui/win32-dxgi-present.cc
+@@ -19,7 +19,7 @@
+ 
+ #include "win32-dxgi-present.h"
+ 
+-#ifdef _WIN32
++#if defined(_WIN32) && !defined(XEMU_LIBRETRO)
+ 
+ #ifndef WIN32_LEAN_AND_MEAN
+ #define WIN32_LEAN_AND_MEAN
+@@ -660,7 +660,7 @@ void win32_dxgi_present_resize(int width, int height)
+ 
+ } // extern "C"
+ 
+-#else // !_WIN32
++#else // No standalone Windows presentation
+ 
+ extern "C" {
+ 

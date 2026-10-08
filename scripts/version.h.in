@@ -1,0 +1,2 @@
+/* Generated from VERSION. */
+#define XEMU_LIBRETRO_VERSION "@XEMU_LIBRETRO_VERSION@"

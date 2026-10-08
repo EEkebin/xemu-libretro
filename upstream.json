@@ -1,0 +1,13 @@
+{
+  "xemu": {
+    "repository": "https://github.com/xemu-project/xemu.git",
+    "revision": "478b4f496102379c7eaa7f3ec10e714a703c4300",
+    "status": "pinned source for the experimental native core; patches and overlay sources are included"
+  },
+  "libretro-common": {
+    "repository": "https://github.com/libretro/libretro-common.git",
+    "revision": "2b96a82bd8479bb3547d271e1eefadc82dd2161e",
+    "vendored_file": "include/libretro.h",
+    "local_file": "third_party/libretro/libretro.h"
+  }
+}

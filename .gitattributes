@@ -1,0 +1,3 @@
+* text=auto eol=lf
+*.patch -whitespace
+third_party/libretro/libretro.h -whitespace

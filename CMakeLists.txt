@@ -1,0 +1,26 @@
+cmake_minimum_required(VERSION 3.16)
+project(xemu_retro LANGUAGES C)
+
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/VERSION")
+file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/VERSION" XEMU_LIBRETRO_VERSION LIMIT_COUNT 1)
+configure_file(scripts/version.h.in xemu-libretro-version.h @ONLY)
+
+add_library(xemu_libretro SHARED src/core.c)
+target_include_directories(xemu_libretro PRIVATE third_party/libretro "${CMAKE_CURRENT_BINARY_DIR}")
+target_compile_features(xemu_libretro PRIVATE c_std_99)
+set_target_properties(xemu_libretro PROPERTIES PREFIX "" C_VISIBILITY_PRESET hidden)
+if(MSVC)
+    target_compile_options(xemu_libretro PRIVATE /W4 /WX)
+else()
+    target_compile_options(xemu_libretro PRIVATE -Wall -Wextra -Wpedantic -Werror)
+    if(UNIX AND NOT APPLE)
+        target_link_options(xemu_libretro PRIVATE -Wl,--no-undefined)
+    endif()
+endif()
+
+include(CTest)
+if(BUILD_TESTING)
+    find_package(Python3 COMPONENTS Interpreter REQUIRED)
+    add_test(NAME libretro_smoke COMMAND "${Python3_EXECUTABLE}"
+        "${CMAKE_CURRENT_SOURCE_DIR}/tests/smoke.py" "$<TARGET_FILE:xemu_libretro>")
+endif()

@@ -1,0 +1,17 @@
+/build/
+/upstream/
+__pycache__/
+*.pyc
+
+# User assets and compiled cores must not enter the source repository.
+*.iso
+*.xiso
+*.qcow2
+*.img
+*.bin
+*.dll
+*.so
+*.dylib
+*.exe
+.env
+.env.*
