@@ -4,6 +4,12 @@
     "revision": "478b4f496102379c7eaa7f3ec10e714a703c4300",
     "status": "pinned source for the experimental native core; patches and overlay sources are included"
   },
+  "dsp56300": {
+    "repository": "https://github.com/mborgerson/dsp56300.git",
+    "revision": "bde7c233a447d32d558c48cb4438e1425fe0bbcc",
+    "version": "0.1.3",
+    "status": "source build for Linux cross targets, matching xemu's DSP dependency version"
+  },
   "libretro-common": {
     "repository": "https://github.com/libretro/libretro-common.git",
     "revision": "2b96a82bd8479bb3547d271e1eefadc82dd2161e",

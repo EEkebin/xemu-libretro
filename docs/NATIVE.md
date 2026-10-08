@@ -74,6 +74,10 @@ xemu's standalone DXGI presentation and NVIDIA profile setup are bypassed.
 
 ## Required files
 
+For experimental Linux ARM64 and RISC-V64 cross builds and their validation
+limits, see [CROSS-BUILDING.md](CROSS-BUILDING.md). Those builds use a separate
+Debian toolchain and produce a core for each architecture.
+
 For the complete menu-by-menu setup and folder example, follow the
 [README installation guide](../README.md#installation). Its
 [troubleshooting section](../README.md#troubleshooting) covers missing-file

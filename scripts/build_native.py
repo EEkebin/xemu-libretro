@@ -66,8 +66,8 @@ def main():
     parser.add_argument("--source-dir", type=Path, default=ROOT / "upstream/xemu")
     parser.add_argument("--build-dir", type=Path, default=ROOT / "build/native")
     parser.add_argument("--jobs", type=int, default=min(8, os.cpu_count() or 1))
-    parser.add_argument("--target", choices=("linux", "windows-x64"), default="linux")
-    parser.add_argument("--cross-prefix", default="x86_64-w64-mingw32.static-")
+    parser.add_argument("--target", choices=("linux", "linux-arm64", "linux-riscv64", "windows-x64"), default="linux")
+    parser.add_argument("--cross-prefix")
     parser.add_argument("--prepare-only", action="store_true")
     parser.add_argument("--reconfigure", action="store_true")
     parser.add_argument("--test", action="store_true")
@@ -76,8 +76,15 @@ def main():
     if not sys.platform.startswith("linux"):
         parser.error("Run this build script inside Linux/WSL; use build_windows.ps1 for Windows.")
     windows = args.target == "windows-x64"
+    cross_linux = args.target in ("linux-arm64", "linux-riscv64")
     if windows and (args.test or args.synthetic):
         parser.error("Test the Windows DLL using Windows Python after cross-compiling.")
+    if cross_linux and (args.test or args.synthetic):
+        parser.error("Use build_linux_cross.py for emulated Linux checks after cross-compiling.")
+    prefix = args.cross_prefix or {
+        "linux": "", "windows-x64": "x86_64-w64-mingw32.static-",
+        "linux-arm64": "aarch64-linux-gnu-", "linux-riscv64": "riscv64-linux-gnu-",
+    }[args.target]
     library = "xemu_libretro.dll" if windows else "xemu_libretro.so"
     source, build = args.source_dir.resolve(), args.build_dir.resolve()
     if args.jobs < 1:
@@ -90,8 +97,11 @@ def main():
         platform_args = ["--enable-pie"]
         env = os.environ.copy()
         if windows:
-            platform_args = [f"--cross-prefix={args.cross_prefix}", "--static", "--disable-pie"]
-            env["AR"] = args.cross_prefix + "gcc-ar"
+            platform_args = [f"--cross-prefix={prefix}", "--static", "--disable-pie"]
+            env["AR"] = prefix + "gcc-ar"
+        elif cross_linux:
+            platform_args += [f"--cross-prefix={prefix}"]
+            env["PKG_CONFIG"] = "pkg-config"
         run([source / "configure", "--extra-cflags=-DXBOX=1",
              "--target-list=i386-softmmu", "--disable-werror", "--disable-docs",
              "--disable-tools", "--disable-guest-agent", "--disable-plugins",
@@ -107,11 +117,13 @@ def main():
         if args.synthetic:
             test.append("--synthetic")
         run(test)
-    destination = ROOT / "build" / ("native-dist/windows-x64" if windows else "native-dist")
+    destination = ROOT / "build/native-dist"
+    if args.target != "linux":
+        destination /= args.target
     destination.mkdir(parents=True, exist_ok=True)
     shutil.copy2(build / library, destination / library)
     if windows:
-        run([args.cross_prefix + "strip", "--strip-debug", destination / library])
+        run([prefix + "strip", "--strip-debug", destination / library])
     shutil.copy2(ROOT / "native/xemu_libretro.info", destination / "xemu_libretro.info")
     shutil.copy2(ROOT / "VERSION", destination / "VERSION")
     for notice in ("LICENSE", "COPYING", "COPYING.LIB"):

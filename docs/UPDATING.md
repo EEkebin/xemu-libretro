@@ -3,7 +3,9 @@
 The native build uses the exact xemu commit in `upstream.json`. A new xemu
 release does not silently change an existing build, and updating standalone
 xemu does not update this RetroArch core. The Windows compiler container and
-vendored libretro header are pinned separately.
+vendored libretro header are pinned separately. Linux cross builds also pin
+their container base and DSP source. Keep the DSP version in `upstream.json`
+aligned with the dependency required by the selected xemu revision.
 
 ## Maintainer workflow
 
@@ -31,6 +33,8 @@ generate the version header from this file; native packages include `VERSION`.
    boot/reset/idle-resume/shutdown checks, and failure handling. On Windows,
    verify the DLL remains safe through frontend release/reload attempts. On
    Linux, check coexistence with a host that loads SDL2 globally.
+   For ARM64/RISC-V64, run the cross checks in [CROSS-BUILDING.md](CROSS-BUILDING.md)
+   and record emulated results separately from native hardware testing.
 7. Test actual games in Windows and Linux RetroArch with separately supplied
    assets. Compare with standalone xemu from the same revision. Check graphics,
    audio pacing, controller input, idle/resume, and clean shutdown; a synthetic

@@ -560,3 +560,117 @@ index be5844a..b14a7c9 100644
  
  extern "C" {
  
+diff --git a/tcg/riscv/tcg-target.c.inc b/tcg/riscv/tcg-target.c.inc
+index 31b9f7d..b2b4681 100644
+--- a/tcg/riscv/tcg-target.c.inc
++++ b/tcg/riscv/tcg-target.c.inc
+@@ -755,6 +755,13 @@ static void set_vtype_len_sew(TCGContext *s, TCGType type, MemOp vsew)
+  * TCG intrinsics
+  */
+ 
++static int vec_lg2_size(TCGType type)
++{
++    tcg_debug_assert(type >= TCG_TYPE_V64 && type <= TCG_TYPE_V256);
++    /* xemu's scalar floating-point types shift the vector enum values. */
++    return type - TCG_TYPE_V64 + 3;
++}
++
+ static bool tcg_out_mov(TCGContext *s, TCGType type, TCGReg ret, TCGReg arg)
+ {
+     if (ret == arg) {
+@@ -769,7 +776,7 @@ static bool tcg_out_mov(TCGContext *s, TCGType type, TCGReg ret, TCGReg arg)
+     case TCG_TYPE_V128:
+     case TCG_TYPE_V256:
+         {
+-            int lmul = type - riscv_lg2_vlenb;
++            int lmul = vec_lg2_size(type) - riscv_lg2_vlenb;
+             int nf = 1 << MAX(lmul, 0);
+             tcg_out_opc_vi(s, OPC_VMVNR_V, ret, arg, nf - 1);
+         }
+@@ -1000,11 +1007,11 @@ static void tcg_out_ld(TCGContext *s, TCGType type, TCGReg arg,
+     case TCG_TYPE_V64:
+     case TCG_TYPE_V128:
+     case TCG_TYPE_V256:
+-        if (type >= riscv_lg2_vlenb) {
++        if (vec_lg2_size(type) >= riscv_lg2_vlenb) {
+             static const RISCVInsn whole_reg_ld[] = {
+                 OPC_VL1RE64_V, OPC_VL2RE64_V, OPC_VL4RE64_V, OPC_VL8RE64_V
+             };
+-            unsigned idx = type - riscv_lg2_vlenb;
++            unsigned idx = vec_lg2_size(type) - riscv_lg2_vlenb;
+ 
+             tcg_debug_assert(idx < ARRAY_SIZE(whole_reg_ld));
+             insn = whole_reg_ld[idx];
+@@ -1039,11 +1046,11 @@ static void tcg_out_st(TCGContext *s, TCGType type, TCGReg arg,
+     case TCG_TYPE_V64:
+     case TCG_TYPE_V128:
+     case TCG_TYPE_V256:
+-        if (type >= riscv_lg2_vlenb) {
++        if (vec_lg2_size(type) >= riscv_lg2_vlenb) {
+             static const RISCVInsn whole_reg_st[] = {
+                 OPC_VS1R_V, OPC_VS2R_V, OPC_VS4R_V, OPC_VS8R_V
+             };
+-            unsigned idx = type - riscv_lg2_vlenb;
++            unsigned idx = vec_lg2_size(type) - riscv_lg2_vlenb;
+ 
+             tcg_debug_assert(idx < ARRAY_SIZE(whole_reg_st));
+             insn = whole_reg_st[idx];
+@@ -2642,6 +2649,14 @@ static const TCGOutOpStore outop_st = {
+ };
+ 
+ 
++static inline void tcg_out_op(TCGContext *s, TCGOpcode opc, TCGType type,
++                              const TCGArg args[TCG_MAX_OP_ARGS],
++                              const int const_args[TCG_MAX_OP_ARGS])
++{
++    /* xemu's extra scalar FP operations are only emitted on x86-64. */
++    g_assert_not_reached();
++}
++
+ static void tcg_out_vec_op(TCGContext *s, TCGOpcode opc,
+                            unsigned vecl, unsigned vece,
+                            const TCGArg args[TCG_MAX_OP_ARGS],
+@@ -2996,7 +3011,7 @@ static void probe_frac_lmul_1(TCGType type, MemOp vsew)
+ {
+     VsetCache *p = &riscv_vset_cache[type - TCG_TYPE_V64][vsew];
+     unsigned avl = tcg_type_size(type) >> vsew;
+-    int lmul = type - riscv_lg2_vlenb;
++    int lmul = vec_lg2_size(type) - riscv_lg2_vlenb;
+     unsigned vtype = encode_vtype(true, true, vsew, lmul & 7);
+     bool lmul_eq_avl = true;
+ 
+@@ -3031,9 +3046,6 @@ static void probe_frac_lmul_1(TCGType type, MemOp vsew)
+ 
+ static void probe_frac_lmul(void)
+ {
+-    /* Match riscv_lg2_vlenb to TCG_TYPE_V64. */
+-    QEMU_BUILD_BUG_ON(TCG_TYPE_V64 != 3);
+-
+     for (TCGType t = TCG_TYPE_V64; t <= TCG_TYPE_V256; t++) {
+         for (MemOp e = MO_8; e <= MO_64; e++) {
+             probe_frac_lmul_1(t, e);
+@@ -3071,13 +3083,13 @@ static void tcg_target_init(TCGContext *s)
+ 
+     if (cpuinfo & CPUINFO_ZVE64X) {
+         switch (riscv_lg2_vlenb) {
+-        case TCG_TYPE_V64:
++        case 3: /* 8-byte host vectors */
+             tcg_target_available_regs[TCG_TYPE_V64] = ALL_VECTOR_REGS;
+             tcg_target_available_regs[TCG_TYPE_V128] = ALL_DVECTOR_REG_GROUPS;
+             tcg_target_available_regs[TCG_TYPE_V256] = ALL_QVECTOR_REG_GROUPS;
+             s->reserved_regs |= (~ALL_QVECTOR_REG_GROUPS & ALL_VECTOR_REGS);
+             break;
+-        case TCG_TYPE_V128:
++        case 4: /* 16-byte host vectors */
+             tcg_target_available_regs[TCG_TYPE_V64] = ALL_VECTOR_REGS;
+             tcg_target_available_regs[TCG_TYPE_V128] = ALL_VECTOR_REGS;
+             tcg_target_available_regs[TCG_TYPE_V256] = ALL_DVECTOR_REG_GROUPS;
+@@ -3085,7 +3097,7 @@ static void tcg_target_init(TCGContext *s)
+             break;
+         default:
+             /* Guaranteed by Zve64x. */
+-            tcg_debug_assert(riscv_lg2_vlenb >= TCG_TYPE_V256);
++            tcg_debug_assert(riscv_lg2_vlenb >= 5);
+             tcg_target_available_regs[TCG_TYPE_V64] = ALL_VECTOR_REGS;
+             tcg_target_available_regs[TCG_TYPE_V128] = ALL_VECTOR_REGS;
+             tcg_target_available_regs[TCG_TYPE_V256] = ALL_VECTOR_REGS;

@@ -21,8 +21,9 @@ through RetroArch. RetroArch handles controller input, video, and audio; the
 emulator runs inside the core. A standalone xemu installation is not required.
 
 > **Experimental:** Windows x64 and Linux x86-64 builds have booted Fuzion Frenzy.
-> Downloadable core binaries are not published yet; build from source using the
-> instructions below. **Restart RetroArch between game sessions.**
+> Download matching binaries from [Releases](https://github.com/EEkebin/xemu-libretro/releases).
+> ARM64/RISC-V64 builds have only been tested under CPU emulation.
+> **Restart RetroArch between game sessions.**
 
 ## **Table of Contents**
 
@@ -41,6 +42,8 @@ emulator runs inside the core. A standalone xemu installation is not required.
 ## **Requirements**
 
 - **Windows x64 or Linux x86-64**, with a matching RetroArch installation.
+  Experimental Linux ARM64 and RISC-V64 build instructions are also available
+  [below](#linux-arm64-and-risc-v64); game compatibility on those targets is unverified.
 - An **OpenGL 4.0-capable driver**, even if RetroArch uses another video driver.
 - Your Xbox **MCPX ROM**, compatible **BIOS**, and writable **HDD image**.
 - An Xbox-compatible game image with the **`.iso`** extension.
@@ -51,14 +54,33 @@ and [disc image guidance](https://xemu.app/docs/disc-images/) for the supported 
 
 ## **Installation**
 
-### 1. Build the Core
+### 1. Download or Build the Core
 
-Follow [Building](#building) for your platform. The native build produces:
+Open [Releases](https://github.com/EEkebin/xemu-libretro/releases), expand
+**Assets**, and download the core archive matching your OS and CPU. Extract it
+before continuing. The source archives are for developers, not for loading in
+RetroArch. See [release compatibility](docs/RELEASING.md#download-compatibility)
+for Linux dependencies; the Linux downloads are not universal distro builds.
+
+| Download suffix | Target |
+| --- | --- |
+| `windows-x64.zip` | Windows x64 |
+| `linux-x86_64-ubuntu26.04.tar.gz` | Linux x86-64, Ubuntu 26.04 library baseline |
+| `linux-arm64-debian13.tar.gz` | Linux ARM64, Debian 13 library baseline; game testing pending |
+| `linux-riscv64-debian13.tar.gz` | Linux RISC-V64, Debian 13 library baseline; game testing pending |
+
+Each core archive includes the core, `.info`, version, documentation, and license
+notices. No launcher, Xbox firmware, game, or writable disk image is included.
+The release's `SHA256SUMS` lists checksums for the downloads.
+
+Alternatively, follow [Building](#building). The native build produces:
 
 | Platform | Core file |
 | --- | --- |
 | Windows x64 | `build/native-dist/windows-x64/xemu_libretro.dll` |
 | Linux x86-64 | `build/native-dist/xemu_libretro.so` |
+| Linux ARM64 (experimental) | `build/native-dist/linux-arm64/xemu_libretro.so` |
+| Linux RISC-V64 (experimental) | `build/native-dist/linux-riscv64/xemu_libretro.so` |
 
 Windows runs the compiled DLL directly. WSL and Podman are only needed to build it.
 
@@ -229,13 +251,36 @@ Do not attach firmware, games, or HDD/EEPROM images.
 | Video and audio | Game output goes through RetroArch's frontend interfaces. |
 | Controllers | Four RetroPad ports map to Xbox controls, including analog sticks and trigger pressure. |
 | EEPROM | Generated automatically when no `eeprom.bin` is supplied. |
-| Desktop builds | Native Windows x64 DLL and Linux x86-64 shared library. |
+| Desktop builds | Windows x64 and Linux x86-64; experimental Linux ARM64/RISC-V64 builds. |
 
 ## **Current Status**
 
-Windows and Linux builds have booted **Fuzion Frenzy** and reached player
-selection through libretro input. The visible Windows RetroArch build has also
-been tested with smooth audio. Broad game compatibility has not been verified.
+### Platform Testing Status
+
+This table describes **this core**, not RetroArch's own platform support.
+
+- 🟢 **Implemented and game-tested:** a game has booted through the core in RetroArch.
+- 🟡 **Implemented; game testing pending:** the core builds and passes basic checks, but actual games remain untested on that target.
+- ❌ **Not implemented:** this project does not provide a core build for that OS/architecture yet.
+
+| OS / Platform | Architecture | Status | Testing completed |
+| --- | --- | --- | --- |
+| Windows | x64 / x86-64 | 🟢 Game-tested | Fuzion Frenzy reached player selection; visible RetroArch output and smooth audio confirmed. |
+| Linux | x86-64 | 🟢 Game-tested | Fuzion Frenzy boot/menu and RetroArch integration tested in Ubuntu WSL with software OpenGL. Native Linux hardware testing remains pending. |
+| Linux | ARM64 / AArch64 | 🟡 Game testing pending | Built; loading, input/audio helpers, and synthetic startup passed under CPU emulation. No actual game or native hardware testing. |
+| Linux | RISC-V64 / RV64GC | 🟡 Game testing pending | Built; loading, input/audio helpers, and synthetic startup passed under CPU emulation, including 128-bit and 256-bit vector configurations. No actual game or native hardware testing. |
+| Windows | ARM64 | ❌ Not implemented | No Windows ARM64 build integration or validation. |
+| macOS | x86-64 | ❌ Not implemented | No macOS build integration or validation. |
+| macOS | ARM64 / Apple silicon | ❌ Not implemented | No macOS build integration or validation. |
+| Android | ARM64 | ❌ Not implemented | No Android build integration or validation; the Linux ARM64 core is not an Android core. |
+| PlayStation 3 | Cell / PowerPC | ❌ Not implemented | No PS3 port or validation. |
+
+**Green does not mean full compatibility or release readiness.** Game testing
+currently covers Fuzion Frenzy's boot/menu path, not complete gameplay or a broad
+game library. Yellow targets have passed synthetic checks, which do not establish
+playable speed. Linux builds also have distribution/library requirements.
+See [native validation details](docs/NATIVE.md#tests) and
+[ARM64/RISC-V64 results and requirements](docs/CROSS-BUILDING.md#recorded-validation).
 
 The current limitations are:
 
@@ -258,7 +303,7 @@ git clone https://github.com/EEkebin/xemu-libretro.git
 cd xemu-libretro
 ```
 
-Both native builds fetch the xemu revision recorded in `upstream.json`, apply
+The native builds fetch the xemu revision recorded in `upstream.json`, apply
 the integration patch, and compile the core. The first build needs network
 access to fetch the toolchain or dependencies.
 
@@ -281,6 +326,21 @@ python3 scripts/build_native.py --build-dir "$HOME/xemu-libretro-build" --test
 
 Add `--synthetic` to exercise machine startup with generated test firmware.
 These tests check the integration; they do not establish game compatibility.
+
+### Linux ARM64 and RISC-V64
+
+On x86-64 Linux or Ubuntu WSL with Python 3, Git, and Podman installed:
+
+```sh
+python3 scripts/build_linux_cross.py --arch arm64 --test
+python3 scripts/build_linux_cross.py --arch riscv64 --test
+```
+
+These experimental builds use a Debian 13 container and run basic checks under
+CPU emulation. They require matching Linux libraries and a desktop OpenGL 4.0
+driver on the target device. They are not Android builds, and real hardware
+game performance is unverified. See [the cross-build guide](docs/CROSS-BUILDING.md)
+for dependencies, testing, and portability limits.
 
 > **Developer note:** The root CMake project and `scripts/build.py` build a
 > separate diagnostic core that does not emulate an Xbox. Use the native build
@@ -307,9 +367,10 @@ HDD/EEPROM data before testing an upgrade. The maintainer workflow is in
 | --- | --- |
 | `native/ui/` | libretro integration and input/audio helpers |
 | `patches/xemu-libretro.patch` | Changes to the pinned xemu source |
-| `upstream.json` | xemu and libretro header revisions |
+| `upstream.json` | xemu, DSP source, and libretro header revisions |
 | `tests/` | Callback, input/audio, lifecycle, and synthetic boot checks |
 | [NATIVE.md](docs/NATIVE.md) | Build instructions, architecture, and validation |
+| [CROSS-BUILDING.md](docs/CROSS-BUILDING.md) | Linux ARM64/RISC-V64 builds and compatibility limits |
 | [PORTING.md](docs/PORTING.md) | Initial source review and porting plan |
 
 ## **Credits**
