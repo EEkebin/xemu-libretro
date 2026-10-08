@@ -50,8 +50,12 @@ assets are excluded.
 
 ## Maintainer checklist
 
-1. Set the calendar version in `VERSION`. Preserve existing public tags; use a
-   same-day suffix when needed. Rebuild all included cores with that version.
+1. Set the date-only calendar version in `VERSION` (`YYYY.MM.DD`); do not append
+   a numeric suffix. Rebuild all included cores with that version. Replacing an
+   existing public release/tag requires an explicit maintainer decision.
+   Update the README's Downloads table, release link, and checksum link to the
+   current tag and asset names. Direct versioned links work for prereleases;
+   GitHub's `/releases/latest` shortcut excludes prereleases.
 2. Run the native Windows/Linux checks and the ARM64/RISC-V64 cross checks.
    Record real-game testing and emulated synthetic checks separately.
 3. Collect the pinned xemu/subproject sources, the DSP source with `cargo vendor

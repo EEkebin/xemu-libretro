@@ -10,7 +10,7 @@ aligned with the dependency required by the selected xemu revision.
 ## Maintainer workflow
 
 Use calendar versioning (CalVer): `YYYY.MM.DD`, with zero-padded month and day.
-The first release on a date has no suffix; further releases use `.1`, `.2`, etc.
+Release versions and tags use the date alone, without a numeric suffix.
 For example, `2026.10.08` is tagged `v2026.10.08`. This is a date scheme, not
 SemVer's major/minor/patch compatibility promise. Set `VERSION` before building
 a release, and keep the tag identical except for its `v` prefix. Build scripts

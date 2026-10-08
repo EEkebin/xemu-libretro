@@ -25,8 +25,29 @@ emulator runs inside the core. A standalone xemu installation is not required.
 > ARM64/RISC-V64 builds have only been tested under CPU emulation.
 > **Restart RetroArch between game sessions.**
 
+## **Downloads**
+
+**Latest experimental release: [v2026.10.08](https://github.com/EEkebin/xemu-libretro/releases/tag/v2026.10.08)**
+
+Choose the build matching your RetroArch OS and CPU. Each button downloads
+the core archive directly.
+
+| Platform | Download | Testing status | Linux baseline |
+|:---|:---:|:---|:---|
+| **Windows x64** | <a href="https://github.com/EEkebin/xemu-libretro/releases/download/v2026.10.08/xemu-libretro-2026.10.08-windows-x64.zip"><img src="https://img.shields.io/badge/DOWNLOAD-Windows_x64-0078D4?style=for-the-badge" height="40" alt="Download Windows x64 core"></a> | 🟢 Game boot/menu tested | — |
+| **Linux x86-64** | <a href="https://github.com/EEkebin/xemu-libretro/releases/download/v2026.10.08/xemu-libretro-2026.10.08-linux-x86_64-ubuntu26.04.tar.gz"><img src="https://img.shields.io/badge/DOWNLOAD-Linux_x86--64-1F6FEB?style=for-the-badge&logo=linux&logoColor=white" height="40" alt="Download Linux x86-64 core"></a> | 🟢 Game boot/menu tested in WSL | Ubuntu 26.04 |
+| **Linux ARM64** | <a href="https://github.com/EEkebin/xemu-libretro/releases/download/v2026.10.08/xemu-libretro-2026.10.08-linux-arm64-debian13.tar.gz"><img src="https://img.shields.io/badge/DOWNLOAD-Linux_ARM64-1F6FEB?style=for-the-badge&logo=linux&logoColor=white" height="40" alt="Download Linux ARM64 core"></a> | 🟡 Synthetic tests only | Debian 13 |
+| **Linux RISC-V64** | <a href="https://github.com/EEkebin/xemu-libretro/releases/download/v2026.10.08/xemu-libretro-2026.10.08-linux-riscv64-debian13.tar.gz"><img src="https://img.shields.io/badge/DOWNLOAD-Linux_RISC--V64-1F6FEB?style=for-the-badge&logo=linux&logoColor=white" height="40" alt="Download Linux RISC-V64 core"></a> | 🟡 Synthetic tests only | Debian 13 |
+
+**[Setup instructions](#installation)** · **[Full testing status](#platform-testing-status)** · **[Release notes and sources](https://github.com/EEkebin/xemu-libretro/releases/tag/v2026.10.08)** · **[SHA-256 checksums](https://github.com/EEkebin/xemu-libretro/releases/download/v2026.10.08/SHA256SUMS)**
+
+All builds need desktop OpenGL 4.0 and your own Xbox files. Linux builds require
+the [documented system libraries](docs/RELEASING.md#download-compatibility).
+ARM64/RISC-V64 game compatibility and native hardware performance remain untested.
+
 ## **Table of Contents**
 
+- [Downloads](#downloads)
 - [Requirements](#requirements)
 - [Installation](#installation)
 - [Troubleshooting](#troubleshooting)
@@ -56,9 +77,10 @@ and [disc image guidance](https://xemu.app/docs/disc-images/) for the supported 
 
 ### 1. Download or Build the Core
 
-Open [Releases](https://github.com/EEkebin/xemu-libretro/releases), expand
-**Assets**, and download the core archive matching your OS and CPU. Extract it
-before continuing. The source archives are for developers, not for loading in
+Use the [download buttons above](#downloads), or open
+[Releases](https://github.com/EEkebin/xemu-libretro/releases) and expand **Assets**.
+Extract the core archive matching your OS and CPU before continuing.
+The source archives are for developers, not for loading in
 RetroArch. See [release compatibility](docs/RELEASING.md#download-compatibility)
 for Linux dependencies; the Linux downloads are not universal distro builds.
 
@@ -349,7 +371,7 @@ for dependencies, testing, and portability limits.
 ## **Updates**
 
 Versions use **calendar versioning**: `2026.10.08`, with the Git tag `v2026.10.08`.
-Additional releases on the same day append a sequence, such as `2026.10.08.1`.
+Release tags use the date alone, without a numeric suffix.
 The `VERSION` file supplies the version reported by both core builds.
 
 An xemu update does not automatically change this core. Each upstream upgrade

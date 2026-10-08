@@ -8,8 +8,8 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def read_version():
     value = (ROOT / "VERSION").read_text(encoding="utf-8").strip()
-    if not re.fullmatch(r"[0-9]{4}\.[0-9]{2}\.[0-9]{2}(?:\.[1-9][0-9]*)?", value):
-        raise ValueError("VERSION must be YYYY.MM.DD or YYYY.MM.DD.N")
+    if not re.fullmatch(r"[0-9]{4}\.[0-9]{2}\.[0-9]{2}", value):
+        raise ValueError("VERSION must be YYYY.MM.DD")
     date(*map(int, value.split(".")[:3]))
     return value
 
